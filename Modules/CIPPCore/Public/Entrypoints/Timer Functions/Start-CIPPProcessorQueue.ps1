@@ -10,8 +10,9 @@ function Start-CIPPProcessorQueue {
     $QueueItems = Get-CIPPAzDataTableEntity @QueueTable -Filter "PartitionKey eq 'Function'"
 
     foreach ($QueueItem in $QueueItems) {
-        if ($PSCmdlet.ShouldProcess("Processing function $($QueueItem.ProcessorFunction)")) {
-            Write-Information "Running queued function $($QueueItem.ProcessorFunction)"
+        $FunctionName = $QueueItem.FunctionName ?? $QueueItem.RowKey
+        if ($PSCmdlet.ShouldProcess("Processing function $($FunctionName)")) {
+            Write-Information "Running queued function $($FunctionName)"
             if ($QueueItem.Parameters) {
                 try {
                     $Parameters = $QueueItem.Parameters | ConvertFrom-Json -AsHashtable
@@ -21,16 +22,16 @@ function Start-CIPPProcessorQueue {
             } else {
                 $Parameters = @{}
             }
-            if (Get-Command -Name $QueueItem.ProcessorFunction -Module CIPPCore -ErrorAction SilentlyContinue) {
+            if (Get-Command -Name $FunctionName -ErrorAction SilentlyContinue) {
                 try {
-                    Invoke-Command -ScriptBlock { & $QueueItem.ProcessorFunction @Parameters }
+                    Invoke-Command -ScriptBlock { & $FunctionName @Parameters }
                 } catch {
-                    Write-Warning "Failed to run function $($QueueItem.ProcessorFunction). Error: $($_.Exception.Message)"
+                    Write-Warning "Failed to run function $($FunctionName). Error: $($_.Exception.Message)"
                 }
             } else {
-                Write-Warning "Function $($QueueItem.ProcessorFunction) not found"
+                Write-Warning "Function $($FunctionName) not found"
             }
-            Remove-AzDataTableEntity @QueueTable -Entity $QueueItem
+            Remove-AzDataTableEntity -Force @QueueTable -Entity $QueueItem
         }
     }
 }
